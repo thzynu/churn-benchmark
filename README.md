@@ -1,116 +1,99 @@
-# Churn Prediction Benchmark — Revised Pipeline
+# Churn Benchmark
 
-Bộ code này dựng lại toàn bộ thực nghiệm cho bài báo *"Benchmarking Deep
-Learning Models for Predicting Customer Churn in Banking with Explainable
-AI"* theo đúng góp ý của Reviewer #2, #3, #5 (Major Revision, Neural
-Computing and Applications).
+Leakage-safe benchmarking pipeline for bank customer churn prediction: 5 classical ML baselines (Logistic Regression, Random Forest, XGBoost, LightGBM, CatBoost) and 3 deep tabular models (MLP, TabNet, TabR), evaluated with repeated stratified cross-validation.
 
-**Dataset dùng:** `data/churn.csv` — bộ 14 cột, 10.000 dòng, đúng như mô tả
-trong bản thảo và mục Data Availability (Kaggle: `mathchi/churn-for-bank-customers`).
-Bộ này **không có** biến `Complain` — nếu bạn thấy tài liệu nào nhắc tới
-`Complain` là đang nói tới một bộ Kaggle khác, không dùng ở đây.
+## Requirements
 
----
+- Python 3.10–3.13
+- Windows / macOS / Linux
 
-## 1. Cài đặt (Windows/Mac/Linux + VS Code)
+## 1. Setup
+
+Clone or download this repo, then from the project root:
 
 ```bash
-python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Mac/Linux
+# Create a virtual environment
+python -m venv .venv
 
+# Activate it
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-> ⚠️ `torch` + `pytorch-tabnet` khá nặng (vài trăm MB). Nếu máy yếu hoặc
-> mạng chậm, có thể chạy trước với `--skip-deep` (xem bên dưới) để có ngay
-> kết quả baseline ML, rồi cài thêm deep learning sau.
+> Note: `torch` and `pytorch-tabnet` are required only for the deep models (MLP/TabNet/TabR). If you don't need them, skip installing those two lines from `requirements.txt` and run with `--skip-deep` (see below).
 
-## 2. Chạy nhanh để kiểm tra mọi thứ hoạt động (~5-10 phút)
+## 2. Data
 
-```bash
-python main.py --quick --skip-deep
-```
+Make sure `data/churn.csv` exists (already included in this repo). The pipeline reads it via the path set in `config.py`.
 
-Lệnh này chạy 1 seed, hyperparameter search nhỏ, **bỏ qua MLP/TabNet/TabR**
-— dùng để chắc chắn code không lỗi trước khi chạy full.
+## 3. Run the full pipeline
 
-## 3. Chạy đầy đủ cho kết quả cuối cùng nộp bài (vài giờ, tuỳ máy)
+From the project root:
 
 ```bash
 python main.py
 ```
 
-Chạy: 5 seed × 5-fold = 25 lần đánh giá cho mỗi model, đầy đủ MLP + TabNet +
-TabR + 5 baseline ML, tuning, SHAP, ablation, kiểm định thống kê.
+This runs, in order:
+1. Leakage audit on the raw dataset
+2. Hyperparameter tuning + repeated CV for the 5 classical baselines
+3. Repeated CV for the 3 deep models (MLP, TabNet, TabR)
+4. Statistical significance tests (Friedman + pairwise Wilcoxon)
+5. Imbalance-handling ablation (none / class weighting / SMOTE)
+6. SHAP feature-importance analysis for every model
 
-Nếu muốn bỏ qua deep learning (chỉ có baseline ML):
+All tables are written to `outputs/tables/*.csv` and all figures to `outputs/figures/*.png`.
+
+### Useful flags
+
 ```bash
+# Quick smoke test (1 seed, small hyperparameter search, fewer epochs)
+# — use this first to confirm everything runs before the full multi-hour run
+python main.py --quick
+
+# Skip the deep models (useful if torch / pytorch-tabnet aren't installed)
 python main.py --skip-deep
 ```
 
-## 4. Minh chứng leakage trước/sau sửa (dùng cho response letter)
+Full run time depends on hardware; expect it to take from tens of minutes to a few hours on a laptop CPU due to hyperparameter search and repeated CV.
+
+## 4. Leakage demonstration (optional, standalone)
+
+To reproduce the before/after data-leakage comparison on its own (without running the whole pipeline):
 
 ```bash
 python leakage_demo.py
 ```
 
-So sánh trực tiếp: pipeline lỗi (SMOTE trước khi chia train/test) vs
-pipeline đã sửa (SMOTE chỉ trên train). Kết quả lưu ở
-`outputs/tables/leakage_before_after.csv` — nên trích trực tiếp bảng này
-vào response letter khi trả lời Reviewer 3 & 5.
+This writes `outputs/tables/leakage_before_after.csv`.
 
-## 5. Cấu trúc project
+## Project structure
 
 ```
 churn-benchmark/
-├── data/churn.csv                  # dataset gốc
-├── config.py                       # chỉnh seed, hyperparameter, đường dẫn ở đây
-├── main.py                         # chạy toàn bộ pipeline
-├── leakage_demo.py                 # minh chứng before/after leakage
+├── main.py                # Full end-to-end pipeline (entry point)
+├── leakage_demo.py         # Standalone leakage before/after demo
+├── config.py               # Central configuration (paths, seeds, hyperparameters)
 ├── requirements.txt
+├── data/
+│   └── churn.csv
 ├── src/
-│   ├── data_pipeline.py            # load data + leakage audit + preprocessing
-│   ├── baseline_models.py          # LogReg, RF, XGBoost, LightGBM, CatBoost
-│   ├── deep_models.py              # MLP, TabNet, TabR (PyTorch)
-│   ├── evaluate.py                 # metrics, repeated CV, kiểm định thống kê
-│   └── shap_analysis.py            # SHAP cho tất cả model + đo độ ổn định
+│   ├── data_pipeline.py    # Loading, leakage audit, preprocessing
+│   ├── baseline_models.py  # Classical ML models + tuning
+│   ├── deep_models.py      # MLP / TabNet / TabR
+│   ├── evaluate.py         # Metrics, CV, statistical tests
+│   └── shap_analysis.py    # SHAP explainability
 └── outputs/
-    ├── tables/                     # mọi bảng số liệu (CSV) — copy thẳng vào Word
-    └── figures/                    # biểu đồ SHAP (PNG)
+    ├── tables/              # Generated CSV/JSON results
+    └── figures/             # Generated PNG figures
 ```
 
-## 6. Đầu ra map trực tiếp vào bản thảo
+## Troubleshooting
 
-| File output | Dùng cho phần nào của bài |
-|---|---|
-| `table_leakage_audit.csv` | Bảng 3.x — Leakage Audit and Feature Availability Assessment |
-| `leakage_before_after.csv` | Minh chứng trong response letter + có thể thêm vào Discussion |
-| `table_baseline_cv_summary.csv`, `table_deep_cv_summary.csv`, `table_ALL_MODELS_summary.csv` | Bảng kết quả chính (Results), thay thế Bảng 2 cũ |
-| `table_pairwise_wilcoxon.csv`, `friedman_test.json` | Phần kiểm định thống kê so sánh model |
-| `table_imbalance_ablation_summary.csv` | Ablation study — so sánh none/class_weight/SMOTE |
-| `shap_importance_*.csv`, `shap_*.png` | Phần Explainability, cho từng model |
-| `baseline_best_hyperparameters.json` | Bảng Hyperparameter tuning trong Methodology (mục tái lập) |
-
-## 7. Ghi chú quan trọng khi viết lại bản thảo
-
-- **Bỏ hoàn toàn** mọi đoạn văn/hình về `Complain_1` — biến này không tồn
-  tại trong dataset 14 cột thật sự dùng trong bài.
-- Model TabR ở đây là **bản tự cài đặt đơn giản hoá** (encoder + attention
-  retrieval), không phải code gốc của tác giả TabR — cần ghi rõ điều này
-  trong Methods để tránh hiểu nhầm giống lỗi "RealTabR" cũ mà Reviewer 3
-  đã chỉ ra.
-- Mọi con số trong bảng đều có mean ± std qua 25 lần đánh giá (5 seed × 5
-  fold) — nhớ báo cáo cả hai, không chỉ giá trị trung bình.
-- Trước khi tuyên bố model nào "tốt nhất", luôn kiểm tra
-  `table_pairwise_wilcoxon.csv` xem khác biệt có ý nghĩa thống kê
-  (`significant_at_0.05`) hay không.
-
-## 8. Nếu gặp lỗi khi chạy
-
-- `ImportError: torch` / `pytorch_tabnet` → chưa cài, chạy lại
-  `pip install -r requirements.txt`, hoặc dùng `--skip-deep` tạm thời.
-- Chạy chậm → giảm `SEEDS` trong `config.py` xuống `[42]` hoặc giảm
-  `BASELINE_SEARCH_ITER`.
-- Muốn đổi kiến trúc MLP/TabNet/TabR → sửa trực tiếp trong `config.py`
-  (mục `MLP_PARAMS`, `TABNET_PARAMS`, `TABR_PARAMS`).
+- **`ImportError` for `torch` or `pytorch_tabnet`**: install them (`pip install torch pytorch-tabnet`) or run with `--skip-deep`.
+- **Long runtime**: use `python main.py --quick` first to validate the setup before committing to a full run.
