@@ -1,0 +1,15 @@
+{
+  "statistic": 160.6400000000001,
+  "p_value": 2.352383103888321e-31,
+  "models": [
+    "CatBoost",
+    "LightGBM",
+    "LogisticRegression",
+    "MLP",
+    "RandomForest",
+    "TabNet",
+    "TabR",
+    "XGBoost"
+  ],
+  "n_pairs": 25
+}

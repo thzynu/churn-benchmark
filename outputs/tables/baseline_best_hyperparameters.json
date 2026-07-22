@@ -1,0 +1,28 @@
+{
+  "LogisticRegression": {
+    "model__C": 0.01
+  },
+  "RandomForest": {
+    "model__n_estimators": 200,
+    "model__min_samples_leaf": 10,
+    "model__max_depth": 12
+  },
+  "XGBoost": {
+    "model__subsample": 0.7,
+    "model__n_estimators": 500,
+    "model__max_depth": 4,
+    "model__learning_rate": 0.03,
+    "model__colsample_bytree": 0.8
+  },
+  "LightGBM": {
+    "model__num_leaves": 15,
+    "model__n_estimators": 300,
+    "model__max_depth": 8,
+    "model__learning_rate": 0.03
+  },
+  "CatBoost": {
+    "model__learning_rate": 0.03,
+    "model__iterations": 500,
+    "model__depth": 4
+  }
+}

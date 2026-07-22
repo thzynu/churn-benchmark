@@ -1,0 +1,14 @@
+Feature,Available at prediction time,Leakage risk,Correlation with target,Decision
+RowNumber,No business value,ID leakage,N/A,Dropped
+CustomerId,No business value,ID leakage,N/A,Dropped
+Surname,No business value,ID leakage,N/A,Dropped
+CreditScore,Yes (pre-churn attribute),Low,0.0271,Kept
+Age,Yes (pre-churn attribute),Low,0.2853,Kept
+Tenure,Yes (pre-churn attribute),Low,0.014,Kept
+Balance,Yes (pre-churn attribute),Low,0.1185,Kept
+NumOfProducts,Yes (pre-churn attribute),Low,0.0478,Kept
+EstimatedSalary,Yes (pre-churn attribute),Low,0.0121,Kept
+Geography,Yes (pre-churn attribute),Low,0.1735,Kept
+Gender,Yes (pre-churn attribute),Low,0.1065,Kept
+HasCrCard,Yes (pre-churn attribute),Low,0.0071,Kept
+IsActiveMember,Yes (pre-churn attribute),Low,0.1561,Kept
