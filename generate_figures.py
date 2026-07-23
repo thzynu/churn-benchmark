@@ -1,0 +1,321 @@
+"""
+Generates every remaining figure needed for the manuscript revision that
+main.py does not already produce. Run this AFTER main.py has completed at
+least once (it reads several CSVs from outputs/tables/).
+
+    python generate_figures.py
+
+Produces (all saved to outputs/figures/):
+    fig2_smote_distribution.png
+    fig3_confusion_matrices.png
+    fig4_shap_all_models.png
+    fig6_numofproducts_vs_exited.png
+    fig7_shap_waterfall.png
+    figA_calibration_curves.png
+    figB_computational_efficiency.png
+And a new table:
+    outputs/tables/table_computational_efficiency.csv
+"""
+import os
+import sys
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import shap
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import config
+from src.data_pipeline import load_raw_data, get_feature_target, build_preprocessor, get_feature_names
+from src.baseline_models import get_model_registry
+from src.shap_analysis import compute_shap_values, mean_abs_importance
+
+from sklearn.model_selection import train_test_split
+from sklearn.calibration import calibration_curve
+from imblearn.over_sampling import SMOTE
+
+
+BASELINE_MODELS = ["LogisticRegression", "RandomForest", "XGBoost", "LightGBM", "CatBoost"]
+DEEP_MODELS = ["MLP", "TabNet", "TabR"]
+ALL_MODELS = BASELINE_MODELS + DEEP_MODELS
+
+
+def fig2_smote_distribution():
+    print("Fig. 2 — class distribution before/after SMOTE ...")
+    df = load_raw_data()
+    y = df[config.TARGET_COL]
+    _, y_train = train_test_split(y, test_size=config.TEST_SIZE, stratify=y, random_state=42)[1::-1] \
+        if False else (None, None)
+    # simpler: recompute directly
+    X, y = get_feature_target(df)
+    _, _, y_train, _ = train_test_split(X, y, test_size=config.TEST_SIZE, stratify=y, random_state=42)
+    before = y_train.value_counts().sort_index()
+    after_count = before.max()
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    labels = ["Before SMOTE\n(Class 0)", "Before SMOTE\n(Class 1)", "After SMOTE\n(Class 0)", "After SMOTE\n(Class 1)"]
+    values = [before[0], before[1], after_count, after_count]
+    colors = ["#4C72B0", "#DD8452", "#4C72B0", "#DD8452"]
+    ax.bar(labels, values, color=colors)
+    for i, v in enumerate(values):
+        ax.text(i, v + 50, str(int(v)), ha="center", fontsize=9)
+    ax.set_ylabel("Number of customers")
+    ax.set_title("Class distribution before and after SMOTE\n(training partition only)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "fig2_smote_distribution.png"), dpi=150)
+    plt.close()
+
+
+def fig3_confusion_matrices():
+    print("Fig. 3 — aggregated confusion matrices for all models ...")
+    frames = []
+    baseline_path = os.path.join(config.TABLES_DIR, "table_baseline_cv_raw.csv")
+    deep_path = os.path.join(config.TABLES_DIR, "table_deep_cv_raw.csv")
+    if os.path.exists(baseline_path):
+        frames.append(pd.read_csv(baseline_path))
+    if os.path.exists(deep_path):
+        frames.append(pd.read_csv(deep_path))
+    if not frames:
+        print("  [SKIPPED] No CV raw result files found. Run main.py first.")
+        return
+    df = pd.concat(frames, ignore_index=True)
+
+    models = [m for m in ALL_MODELS if m in df["model"].unique()]
+    n = len(models)
+    ncols = 4
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.5 * nrows))
+    axes = np.atleast_1d(axes).flatten()
+
+    for i, model in enumerate(models):
+        sub = df[df["model"] == model]
+        tn, fp, fn, tp = sub["TN"].sum(), sub["FP"].sum(), sub["FN"].sum(), sub["TP"].sum()
+        cm = np.array([[tn, fp], [fn, tp]])
+        ax = axes[i]
+        im = ax.imshow(cm, cmap="Blues")
+        ax.set_xticks([0, 1]); ax.set_xticklabels(["Pred 0", "Pred 1"])
+        ax.set_yticks([0, 1]); ax.set_yticklabels(["True 0", "True 1"])
+        for r in range(2):
+            for c in range(2):
+                ax.text(c, r, f"{cm[r, c]:,}", ha="center", va="center",
+                        color="white" if cm[r, c] > cm.max() / 2 else "black", fontsize=10)
+        ax.set_title(model, fontsize=11)
+
+    for j in range(len(models), len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle("Aggregated confusion matrices across 25 repeated CV runs (summed counts)", fontsize=12)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "fig3_confusion_matrices.png"), dpi=150)
+    plt.close()
+
+
+def fig4_shap_all_models():
+    print("Fig. 4 — SHAP importance grid for all models ...")
+    importances = {}
+    for model in ALL_MODELS:
+        path = os.path.join(config.TABLES_DIR, f"shap_importance_{model}.csv")
+        if os.path.exists(path):
+            s = pd.read_csv(path, index_col=0).iloc[:, 0]
+            importances[model] = s
+    if not importances:
+        print("  [SKIPPED] No shap_importance_*.csv files found. Run main.py first.")
+        return
+
+    n = len(importances)
+    ncols = 4
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.2 * ncols, 3.2 * nrows))
+    axes = np.atleast_1d(axes).flatten()
+
+    for i, (model, s) in enumerate(importances.items()):
+        ax = axes[i]
+        s.sort_values().plot(kind="barh", ax=ax, color="#4C72B0")
+        ax.set_title(model, fontsize=11)
+        ax.set_xlabel("Mean |SHAP value|")
+
+    for j in range(len(importances), len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle("Mean |SHAP value| feature importance across all benchmarked models", fontsize=12)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "fig4_shap_all_models.png"), dpi=150)
+    plt.close()
+
+
+def fig6_numofproducts_vs_exited():
+    print("Fig. 6 — NumOfProducts vs Exited ...")
+    df = load_raw_data()
+    ct = pd.crosstab(df["NumOfProducts"], df[config.TARGET_COL])
+    ct_pct = ct.div(ct.sum(axis=1), axis=0) * 100
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ct_pct.plot(kind="bar", stacked=True, ax=ax, color=["#4C72B0", "#DD8452"])
+    ax.set_xlabel("Number of products held")
+    ax.set_ylabel("Percentage of customers (%)")
+    ax.set_title("Churn rate by number of products held")
+    ax.legend(["Retained (0)", "Churned (1)"], title="Exited")
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "fig6_numofproducts_vs_exited.png"), dpi=150)
+    plt.close()
+
+
+def _fit_quick_baseline(model_name, X_train, y_train):
+    registry = get_model_registry(42)
+    estimator, _ = registry[model_name]
+    pre = build_preprocessor()
+    Xtr = pre.fit_transform(X_train)
+    sm = SMOTE(random_state=42)
+    Xtr_res, ytr_res = sm.fit_resample(Xtr, y_train)
+    estimator.fit(Xtr_res, ytr_res)
+    return estimator, pre
+
+
+def fig7_shap_waterfall(local_model_name="CatBoost"):
+    print(f"Fig. 7 — SHAP waterfall (local interpretation, model={local_model_name}) ...")
+    df = load_raw_data()
+    X, y = get_feature_target(df)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=config.TEST_SIZE, stratify=y, random_state=42
+    )
+    model, pre = _fit_quick_baseline(local_model_name, X_train, y_train)
+    Xte = pre.transform(X_test)
+    feature_names = get_feature_names(pre)
+    y_test_arr = np.asarray(y_test)
+
+    proba = model.predict_proba(Xte)[:, 1]
+    churn_idx = np.where((y_test_arr == 1) & (proba > 0.5))[0]
+    nonchurn_idx = np.where((y_test_arr == 0) & (proba < 0.5))[0]
+    if len(churn_idx) == 0 or len(nonchurn_idx) == 0:
+        print("  [SKIPPED] Could not find a clean churn/non-churn example.")
+        return
+    idx_pair = [nonchurn_idx[0], churn_idx[0]]
+
+    explainer = shap.TreeExplainer(model)
+    sv = explainer.shap_values(Xte[idx_pair])
+    if isinstance(sv, list):
+        sv = sv[1]
+    elif np.asarray(sv).ndim == 3:
+        sv = np.asarray(sv)[:, :, 1]
+    base_value = explainer.expected_value
+    if isinstance(base_value, (list, np.ndarray)):
+        base_value = base_value[1] if len(np.atleast_1d(base_value)) > 1 else base_value[0]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    for ax, i, label in zip(axes, range(2), ["(a) Retained customer example", "(b) Churned customer example"]):
+        expl = shap.Explanation(
+            values=sv[i], base_values=base_value, data=Xte[idx_pair][i],
+            feature_names=feature_names,
+        )
+        plt.sca(ax)
+        shap.plots.waterfall(expl, show=False, max_display=10)
+        ax.set_title(label, fontsize=10)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "fig7_shap_waterfall.png"), dpi=150)
+    plt.close()
+
+
+def figA_calibration_curves():
+    print("Fig. A — calibration curves (reliability diagrams) ...")
+    df = load_raw_data()
+    X, y = get_feature_target(df)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=config.TEST_SIZE, stratify=y, random_state=42
+    )
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
+
+    for model_name in BASELINE_MODELS:
+        model, pre = _fit_quick_baseline(model_name, X_train, y_train)
+        Xte = pre.transform(X_test)
+        proba = model.predict_proba(Xte)[:, 1]
+        frac_pos, mean_pred = calibration_curve(y_test, proba, n_bins=10, strategy="quantile")
+        ax.plot(mean_pred, frac_pos, marker="o", label=model_name, linewidth=1)
+
+    try:
+        from src.deep_models import get_deep_model
+        pre = build_preprocessor()
+        Xtr = pre.fit_transform(X_train)
+        Xte = pre.transform(X_test)
+        sm = SMOTE(random_state=42)
+        Xtr_res, ytr_res = sm.fit_resample(Xtr, y_train)
+        Xfit_tr, Xfit_val, yfit_tr, yfit_val = train_test_split(
+            Xtr_res, ytr_res, test_size=0.15, random_state=42
+        )
+        for model_name in DEEP_MODELS:
+            model = get_deep_model(model_name, input_dim=Xtr_res.shape[1], random_state=42)
+            model.fit(Xfit_tr, yfit_tr, Xfit_val, yfit_val)
+            proba = model.predict_proba(Xte)[:, 1]
+            frac_pos, mean_pred = calibration_curve(y_test, proba, n_bins=10, strategy="quantile")
+            ax.plot(mean_pred, frac_pos, marker="s", linestyle="--", label=model_name, linewidth=1)
+    except ImportError:
+        print("  [NOTE] torch/pytorch-tabnet not installed -> deep models skipped in calibration plot.")
+
+    ax.set_xlabel("Mean predicted probability")
+    ax.set_ylabel("Fraction of positives")
+    ax.set_title("Calibration curves (reliability diagram)")
+    ax.legend(fontsize=8)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "figA_calibration_curves.png"), dpi=150)
+    plt.close()
+
+
+def figB_computational_efficiency():
+    print("Fig. B — computational efficiency comparison ...")
+    frames = []
+    baseline_path = os.path.join(config.TABLES_DIR, "table_baseline_cv_raw.csv")
+    deep_path = os.path.join(config.TABLES_DIR, "table_deep_cv_raw.csv")
+    if os.path.exists(baseline_path):
+        frames.append(pd.read_csv(baseline_path))
+    if os.path.exists(deep_path):
+        frames.append(pd.read_csv(deep_path))
+    if not frames:
+        print("  [SKIPPED] No CV raw result files found. Run main.py first.")
+        return
+    df = pd.concat(frames, ignore_index=True)
+
+    agg = df.groupby("model").agg(
+        train_time_mean=("train_time_sec", "mean"),
+        train_time_std=("train_time_sec", "std"),
+        infer_time_mean=("infer_time_per_sample_sec", "mean"),
+        infer_time_std=("infer_time_per_sample_sec", "std"),
+    ).reset_index()
+    if "n_parameters" in df.columns:
+        params = df.groupby("model")["n_parameters"].mean()
+        agg = agg.merge(params, on="model", how="left")
+
+    agg.to_csv(os.path.join(config.TABLES_DIR, "table_computational_efficiency.csv"), index=False)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].bar(agg["model"], agg["train_time_mean"], yerr=agg["train_time_std"], color="#4C72B0")
+    axes[0].set_ylabel("Training time (s)")
+    axes[0].set_title("Training time per model")
+    axes[0].tick_params(axis="x", rotation=45)
+
+    axes[1].bar(agg["model"], agg["infer_time_mean"] * 1000, yerr=agg["infer_time_std"] * 1000, color="#DD8452")
+    axes[1].set_ylabel("Inference time per sample (ms)")
+    axes[1].set_title("Inference latency per model")
+    axes[1].tick_params(axis="x", rotation=45)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.FIGURES_DIR, "figB_computational_efficiency.png"), dpi=150)
+    plt.close()
+    print(agg.to_string(index=False))
+
+
+def main():
+    fig2_smote_distribution()
+    fig3_confusion_matrices()
+    fig4_shap_all_models()
+    fig6_numofproducts_vs_exited()
+    fig7_shap_waterfall()
+    figA_calibration_curves()
+    figB_computational_efficiency()
+    print("\nAll figures saved to:", config.FIGURES_DIR)
+    print("Updated table saved to:", os.path.join(config.TABLES_DIR, "table_computational_efficiency.csv"))
+
+
+if __name__ == "__main__":
+    main()
