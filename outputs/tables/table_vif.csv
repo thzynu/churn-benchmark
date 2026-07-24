@@ -1,0 +1,9 @@
+Feature,VIF,Concern
+Balance,1.103,Low (<5)
+NumOfProducts,1.103,Low (<5)
+IsActiveMember,1.009,Low (<5)
+Age,1.009,Low (<5)
+Tenure,1.002,Low (<5)
+CreditScore,1.001,Low (<5)
+EstimatedSalary,1.001,Low (<5)
+HasCrCard,1.001,Low (<5)

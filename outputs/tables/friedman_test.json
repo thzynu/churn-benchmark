@@ -1,6 +1,6 @@
 {
-  "statistic": 160.6400000000001,
-  "p_value": 2.352383103888321e-31,
+  "statistic": 150.96000000000004,
+  "p_value": 2.552030096602085e-29,
   "models": [
     "CatBoost",
     "LightGBM",

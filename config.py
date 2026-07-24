@@ -57,12 +57,16 @@ IMBALANCE_STRATEGIES = ["none", "class_weight", "smote"]
 # Model hyperparameters (kept modest so the whole pipeline runs in a
 # reasonable time on a laptop CPU; increase for the final paper-quality run)
 # ---------------------------------------------------------------------------
+# Tuned via Optuna on seed=42 with an inner train/validation split
+# (see tune_deep_models.py and outputs/tables/table_hyperparameter_best.csv).
+# max_epochs/patience kept at the full search-time budget (not the reduced
+# budget used during the search itself) for the final reported runs.
 MLP_PARAMS = dict(
-    hidden_layers=[64, 32],
-    dropout=0.3,
+    hidden_layers=[32, 16],
+    dropout=0.1097,
     batch_norm=True,
-    learning_rate=1e-3,
-    batch_size=64,
+    learning_rate=0.001266,
+    batch_size=32,
     max_epochs=100,
     patience=10,
 )
@@ -70,9 +74,9 @@ MLP_PARAMS = dict(
 TABNET_PARAMS = dict(
     n_d=16,
     n_a=16,
-    n_steps=4,
-    gamma=1.5,
-    lambda_sparse=1e-3,
+    n_steps=5,
+    gamma=1.156,
+    lambda_sparse=0.0002051,
     max_epochs=100,
     patience=15,
     batch_size=256,
@@ -81,9 +85,9 @@ TABNET_PARAMS = dict(
 TABR_PARAMS = dict(
     embed_dim=32,
     n_neighbors=16,
-    dropout=0.2,
-    learning_rate=1e-3,
-    batch_size=128,
+    dropout=0.3909,
+    learning_rate=0.001904,
+    batch_size=64,
     max_epochs=100,
     patience=10,
 )

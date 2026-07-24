@@ -1,0 +1,4 @@
+Gender,n,churn_rate,ROC_AUC,Recall,FPR,FNR,Positive_rate
+Female,930.0,0.2505,0.856,0.5622,0.0789,0.4378,0.2
+Male,1070.0,0.1626,0.856,0.5172,0.0513,0.4828,0.1271
+Max group gap,,,,0.045,,,0.0729

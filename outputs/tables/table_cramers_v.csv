@@ -1,0 +1,7 @@
+Feature A,Feature B,Cramers_V
+Geography,Gender,0.0222
+Gender,IsActiveMember,0.02
+Geography,IsActiveMember,0.0182
+HasCrCard,IsActiveMember,0.006
+Geography,HasCrCard,0.0048
+Gender,HasCrCard,0.0

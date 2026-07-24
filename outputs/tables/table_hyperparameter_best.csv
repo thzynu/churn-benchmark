@@ -1,0 +1,4 @@
+model,best_val_roc_auc,n_trials,best_params
+mlp,0.8588,30,"{'n_layers': 2, 'units_l0': 32, 'units_l1': 16, 'dropout': 0.10970227527634369, 'batch_norm': True, 'learning_rate': 0.0012664102238221543, 'batch_size': 32}"
+tabr,0.8533,30,"{'embed_dim': 32, 'n_neighbors': 16, 'dropout': 0.39086113323635974, 'learning_rate': 0.001903690691144191, 'batch_size': 64}"
+tabnet,0.8588,15,"{'n_d_n_a': 16, 'n_steps': 5, 'gamma': 1.1560186404424364, 'lambda_sparse': 0.00020511104188433984, 'batch_size': 256}"

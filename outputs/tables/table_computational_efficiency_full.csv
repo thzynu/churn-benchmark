@@ -1,0 +1,9 @@
+model,peak_ram_mb,model_size_kb
+LogisticRegression,0.453837,0.794
+RandomForest,10.957165,24269.076
+XGBoost,0.107935,296.87
+LightGBM,1.964376,347.386
+CatBoost,0.156528,1124.512
+MLP,72.30747,9.626
+TabNet,8.175567,340.968
+TabR,0.478042,15.058
