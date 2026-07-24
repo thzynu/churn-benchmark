@@ -6,6 +6,7 @@ xgboost>=2.0.0
 lightgbm>=4.0.0
 catboost>=1.2.0
 torch>=2.0.0
+optuna>=3.5.0
 pytorch-tabnet>=4.1.0
 shap>=0.44.0
 matplotlib>=3.7.0
